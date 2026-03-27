@@ -1,0 +1,234 @@
+# ============================================================
+# Falco Custom Rules — InvitISE Cloud Security POC
+# Runtime threat detection for financial services Kubernetes
+# Covers: privilege_escalation, container_escape, crypto mining,
+#         sensitive file access, data exfiltration patterns
+# NIST: SI-4, IR-4 | ISO 27001: A.16.1 | PCI-DSS: Req 10, 11
+# ============================================================
+
+# -------------------------------------------------------
+# Macro definitions — reusable conditions
+# -------------------------------------------------------
+- macro: container_started
+  condition: evt.type = execve and container.id != host
+
+- macro: sensitive_file_paths
+  condition: >
+    fd.name startswith /etc/shadow or
+    fd.name startswith /etc/passwd or
+    fd.name startswith /etc/ssh or
+    fd.name startswith /root/.ssh or
+    fd.name startswith /proc/1/mem or
+    fd.name startswith /var/run/secrets/kubernetes.io
+
+- macro: payment_data_paths
+  condition: >
+    fd.name startswith /var/lib/payment or
+    fd.name startswith /mnt/pci-data or
+    fd.name contains "card_data" or
+    fd.name contains "pan_data" or
+    fd.name contains "cvv"
+
+- macro: crypto_mining_binaries
+  condition: >
+    proc.name in (xmrig, minerd, cpuminer, ethminer, ccminer,
+                  cryptonight, nbminer, t-rex, phoenixminer)
+
+- macro: shell_execution_in_container
+  condition: >
+    (proc.name in (bash, sh, zsh, fish, dash) and container.id != host)
+
+- macro: known_privileged_images
+  condition: >
+    container.image.repository in (
+      k8s.gcr.io/pause,
+      registry.k8s.io/pause,
+      falcosecurity/falco
+    )
+
+# -------------------------------------------------------
+# Rule 1: Privilege Escalation — setuid/setgid execution
+# NIST: AC-6, SI-4 | CIS: 5.2.x
+# -------------------------------------------------------
+- rule: privilege_escalation_setuid
+  desc: >
+    Detects privilege escalation via setuid binary execution inside a container.
+    Critical for fintech platform hardening — setuid binaries can grant root.
+  condition: >
+    container_started and
+    container.id != host and
+    evt.type = execve and
+    (proc.exepath endswith su or
+     proc.exepath endswith sudo or
+     proc.exepath endswith newgrp or
+     proc.exepath endswith pkexec) and
+    not known_privileged_images
+  output: >
+    Privilege escalation via setuid binary in container
+    (user=%user.name container=%container.name image=%container.image.repository
+     cmd=%proc.cmdline pid=%proc.pid parent=%proc.pname)
+  priority: CRITICAL
+  tags: [privilege_escalation, CIS-5.2, NIST-AC-6, PCI-DSS-10, fintech]
+
+# Rule 2: Privilege Escalation — capabilities manipulation
+- rule: privilege_escalation_capabilities
+  desc: Detects capability manipulation that could lead to privilege escalation
+  condition: >
+    container.id != host and
+    evt.type in (setuid, setgid, capset) and
+    not known_privileged_images
+  output: >
+    Capability manipulation detected in container
+    (syscall=%evt.type user=%user.name container=%container.name
+     image=%container.image.repository pid=%proc.pid)
+  priority: HIGH
+  tags: [privilege_escalation, NIST-AC-6, CIS-5.2.5]
+
+# -------------------------------------------------------
+# Rule 3: Container Escape — nsenter / host mount access
+# NIST: SI-3, SI-7 | ISO 27001: A.12.6.1
+# -------------------------------------------------------
+- rule: container_escape_nsenter
+  desc: >
+    Detects potential container escape via namespace manipulation (nsenter).
+    Container escape is a critical threat in multi-tenant fintech environments.
+  condition: >
+    container.id != host and
+    evt.type = execve and
+    proc.name = nsenter
+  output: >
+    Possible container_escape via nsenter
+    (user=%user.name container=%container.name image=%container.image.repository
+     cmd=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, NIST-SI-7, ISO27001-A.12.6, fintech]
+
+- rule: container_escape_host_path_write
+  desc: Detects writes to host filesystem paths mounted into a container
+  condition: >
+    container.id != host and
+    evt.type in (write, open) and
+    evt.is_open_write = true and
+    (fd.name startswith /host/etc or
+     fd.name startswith /host/proc or
+     fd.name startswith /host/var/run/docker.sock or
+     fd.name = /var/run/docker.sock)
+  output: >
+    Possible container_escape — write to host path from container
+    (file=%fd.name user=%user.name container=%container.name
+     image=%container.image.repository pid=%proc.pid)
+  priority: CRITICAL
+  tags: [container_escape, NIST-SI-7, PCI-DSS-6.4]
+
+# -------------------------------------------------------
+# Rule 4: Crypto Mining Detection
+# Protects fintech infrastructure from resource hijacking
+# -------------------------------------------------------
+- rule: crypto_mining_process_detected
+  desc: >
+    Detects known cryptocurrency mining binaries running in containers.
+    Crypto mining wastes fintech platform resources and indicates compromise.
+  condition: >
+    container.id != host and
+    evt.type = execve and
+    crypto_mining_binaries
+  output: >
+    Crypto mining process detected in container
+    (proc=%proc.name user=%user.name container=%container.name
+     image=%container.image.repository cmd=%proc.cmdline pid=%proc.pid)
+  priority: CRITICAL
+  tags: [crypto_mining, NIST-SI-3, ISO27001-A.12.6, fintech]
+
+- rule: crypto_mining_network_activity
+  desc: Detects network connections to known mining pools
+  condition: >
+    container.id != host and
+    evt.type in (connect, sendto) and
+    (fd.sport in (3333, 4444, 5555, 7777, 8888, 9999, 14444, 45560) or
+     fd.rip in (
+       45.56.96.181, 198.54.132.0/24,
+       104.160.173.0/24
+     ))
+  output: >
+    Potential crypto mining pool connection from container
+    (dst_ip=%fd.rip dst_port=%fd.rport container=%container.name
+     image=%container.image.repository pid=%proc.pid)
+  priority: HIGH
+  tags: [crypto_mining, NIST-SI-3]
+
+# -------------------------------------------------------
+# Rule 5: Sensitive File Access
+# NIST: AC-3, AC-6 | ISO 27001: A.9.4 | PCI-DSS: Req 7
+# -------------------------------------------------------
+- rule: sensitive_file_read
+  desc: >
+    Detects reads of sensitive system files from within containers.
+    Protects secrets, credentials, and PCI cardholder data.
+  condition: >
+    container.id != host and
+    evt.type in (open, openat) and
+    evt.is_open_read = true and
+    sensitive_file_paths and
+    not proc.name in (falco, sshd, systemd)
+  output: >
+    Sensitive file read in container
+    (file=%fd.name proc=%proc.name user=%user.name container=%container.name
+     image=%container.image.repository pid=%proc.pid)
+  priority: HIGH
+  tags: [sensitive_file_access, NIST-AC-6, ISO27001-A.9.4, PCI-DSS-7]
+
+- rule: payment_data_access_anomaly
+  desc: >
+    Detects unexpected access to payment card data paths.
+    PCI-DSS requires monitoring all access to cardholder data.
+  condition: >
+    container.id != host and
+    evt.type in (open, openat, read) and
+    payment_data_paths and
+    not proc.name in (payment-svc, audit-daemon)
+  output: >
+    Anomalous payment data access detected
+    (file=%fd.name proc=%proc.name user=%user.name container=%container.name
+     image=%container.image.repository pid=%proc.pid)
+  priority: CRITICAL
+  tags: [sensitive_file_access, PCI-DSS-3.4, NIST-AC-3, fintech]
+
+# -------------------------------------------------------
+# Rule 6: Shell in Container (interactive)
+# -------------------------------------------------------
+- rule: shell_spawned_in_container
+  desc: >
+    Detects interactive shell spawning in a container — typically
+    indicates lateral movement or hands-on-keyboard attacker activity.
+  condition: >
+    container.id != host and
+    shell_execution_in_container and
+    evt.type = execve and
+    proc.tty != 0 and
+    not known_privileged_images
+  output: >
+    Interactive shell spawned in container
+    (shell=%proc.name user=%user.name container=%container.name
+     image=%container.image.repository cmd=%proc.cmdline pid=%proc.pid)
+  priority: HIGH
+  tags: [shell_in_container, NIST-SI-4, ISO27001-A.16.1]
+
+# -------------------------------------------------------
+# Rule 7: Kubernetes Secret Access
+# -------------------------------------------------------
+- rule: k8s_secret_access_from_container
+  desc: >
+    Detects access to Kubernetes service account tokens or secrets
+    mounted inside a container. Credential theft vector.
+  condition: >
+    container.id != host and
+    evt.type in (open, openat) and
+    evt.is_open_read = true and
+    (fd.name startswith /var/run/secrets/kubernetes.io/serviceaccount or
+     fd.name startswith /run/secrets/kubernetes.io)
+  output: >
+    Kubernetes secret accessed in container
+    (file=%fd.name proc=%proc.name user=%user.name container=%container.name
+     image=%container.image.repository)
+  priority: MEDIUM
+  tags: [sensitive_file_access, NIST-IA-5, CIS-5.1]

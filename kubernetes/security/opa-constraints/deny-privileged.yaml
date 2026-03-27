@@ -1,0 +1,111 @@
+# ============================================================
+# OPA Gatekeeper — Deny Privileged Containers
+# CIS Benchmark: 5.2.1 | NIST: AC-6, SI-3 | ISO 27001: A.9.4
+# Blocking privileged containers is essential for platform
+# hardening in financial services Kubernetes environments
+# ============================================================
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8sdenyPrivilegedContainers
+  annotations:
+    description: "Blocks privileged container execution — prevents full host access"
+    compliance: "CIS-5.2.1, NIST-AC-6, ISO27001-A.9.4.1"
+    owner: "security-team@invitise.com"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sDenyPrivilegedContainers
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedPrivilegedImages:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8sdenyPrivilegedContainers
+
+        import future.keywords.contains
+        import future.keywords.if
+
+        violation contains msg if {
+          input.review.kind.kind == "Pod"
+          some container in input.review.object.spec.containers
+          not is_allowed_image(container)
+          container.securityContext.privileged == true
+          msg := sprintf(
+            "Container '%v' in Pod '%v' must not run as privileged (CIS 5.2.1). Privileged mode grants full host access — forbidden in PCI-DSS environments.",
+            [container.name, input.review.object.metadata.name]
+          )
+        }
+
+        violation contains msg if {
+          input.review.kind.kind == "Pod"
+          some container in input.review.object.spec.initContainers
+          not is_allowed_image(container)
+          container.securityContext.privileged == true
+          msg := sprintf(
+            "InitContainer '%v' in Pod '%v' must not run as privileged (CIS 5.2.1)",
+            [container.name, input.review.object.metadata.name]
+          )
+        }
+
+        # Block allowPrivilegeEscalation
+        violation contains msg if {
+          input.review.kind.kind == "Pod"
+          some container in input.review.object.spec.containers
+          container.securityContext.allowPrivilegeEscalation == true
+          msg := sprintf(
+            "Container '%v' in Pod '%v' must not allow privilege escalation (CIS 5.2.5)",
+            [container.name, input.review.object.metadata.name]
+          )
+        }
+
+        # Block hostPID / hostIPC
+        violation contains msg if {
+          input.review.kind.kind == "Pod"
+          input.review.object.spec.hostPID == true
+          msg := sprintf(
+            "Pod '%v' must not share host PID namespace (CIS 5.2.2)",
+            [input.review.object.metadata.name]
+          )
+        }
+
+        violation contains msg if {
+          input.review.kind.kind == "Pod"
+          input.review.object.spec.hostIPC == true
+          msg := sprintf(
+            "Pod '%v' must not share host IPC namespace (CIS 5.2.3)",
+            [input.review.object.metadata.name]
+          )
+        }
+
+        is_allowed_image(container) if {
+          some allowed_image in input.parameters.allowedPrivilegedImages
+          startswith(container.image, allowed_image)
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sDenyPrivilegedContainers
+metadata:
+  name: deny-privileged-containers
+  annotations:
+    compliance: "CIS-5.2.1, NIST-AC-6, PCI-DSS-7.1"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - gatekeeper-system
+  parameters:
+    allowedPrivilegedImages: []

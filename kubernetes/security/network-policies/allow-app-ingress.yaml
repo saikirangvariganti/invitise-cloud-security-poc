@@ -1,0 +1,98 @@
+# ============================================================
+# Kubernetes NetworkPolicy — Allow Ingress from Ingress Controller
+# CIS Benchmark: 5.3.2 | NIST: SC-7 | ISO 27001: A.13.1.3
+# Explicit allow on top of default-deny-all baseline.
+# Only traffic from the ingress-nginx namespace is permitted.
+# ============================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: fintech-app
+  labels:
+    app.kubernetes.io/managed-by: "security-team"
+    compliance: "CIS-5.3.2,NIST-SC-7"
+  annotations:
+    description: "Allow inbound traffic from ingress-nginx namespace only"
+    compliance: "CIS-5.3.2, NIST-SC-7, ISO27001-A.13.1.3"
+    owner: "security-team@invitise.com"
+spec:
+  podSelector:
+    matchLabels:
+      app: fintech-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 8443
+
+---
+# Allow egress to DNS (required for service discovery)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: fintech-app
+  labels:
+    app.kubernetes.io/managed-by: "security-team"
+    compliance: "CIS-5.3.2,NIST-SC-7"
+  annotations:
+    description: "Allow egress to kube-dns for service discovery"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# Allow fintech-app pods to reach database namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-egress
+  namespace: fintech-app
+  labels:
+    app.kubernetes.io/managed-by: "security-team"
+    compliance: "PCI-DSS-1.3,NIST-SC-7"
+  annotations:
+    description: "Allow egress from fintech-app API pods to database namespace"
+    compliance: "PCI-DSS-1.3, NIST-SC-7"
+spec:
+  podSelector:
+    matchLabels:
+      app: fintech-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: database
+          podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432

@@ -1,0 +1,95 @@
+# ============================================================
+# OPA Gatekeeper — Require CPU and Memory Resource Limits
+# CIS Benchmark: 5.6.4 | NIST: SC-5 | ISO 27001: A.12.1.3
+# Prevents noisy-neighbour DoS in multi-tenant fintech clusters
+# ============================================================
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequireresourcelimits
+  annotations:
+    description: "Requires containers to declare CPU and memory resource limits"
+    compliance: "CIS-5.6.4, NIST-SC-5, ISO27001-A.12.1.3"
+    owner: "security-team@invitise.com"
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequireResourceLimits
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            exemptImages:
+              type: array
+              items:
+                type: string
+            maxMemory:
+              type: string
+            maxCpu:
+              type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequireresourcelimits
+
+        import future.keywords.contains
+        import future.keywords.if
+
+        violation contains msg if {
+          input.review.kind.kind == "Pod"
+          some container in input.review.object.spec.containers
+          not is_exempt(container)
+          not has_cpu_limit(container)
+          msg := sprintf(
+            "Container '%v' in Pod '%v' is missing CPU limit (CIS 5.6.4 — required for platform stability)",
+            [container.name, input.review.object.metadata.name]
+          )
+        }
+
+        violation contains msg if {
+          input.review.kind.kind == "Pod"
+          some container in input.review.object.spec.containers
+          not is_exempt(container)
+          not has_memory_limit(container)
+          msg := sprintf(
+            "Container '%v' in Pod '%v' is missing memory limit (CIS 5.6.4 — OOM prevention required in fintech)",
+            [container.name, input.review.object.metadata.name]
+          )
+        }
+
+        has_cpu_limit(container) if {
+          container.resources.limits.cpu
+        }
+
+        has_memory_limit(container) if {
+          container.resources.limits.memory
+        }
+
+        is_exempt(container) if {
+          some exempt_image in input.parameters.exemptImages
+          startswith(container.image, exempt_image)
+        }
+
+---
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequireResourceLimits
+metadata:
+  name: require-resource-limits-all-pods
+  annotations:
+    compliance: "CIS-5.6.4, NIST-SC-5, ISO27001-A.12.1.3"
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - gatekeeper-system
+  parameters:
+    exemptImages:
+      - "registry.k8s.io/pause:"
+    maxMemory: "4Gi"
+    maxCpu: "4"

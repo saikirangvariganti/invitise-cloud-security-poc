@@ -1,0 +1,192 @@
+{
+  "_metadata": {
+    "title": "CIS Benchmark → NIST 800-53 → ISO 27001 Annex A Control Mapping",
+    "description": "Maps CIS AWS Foundations Benchmark v1.4.0 controls to NIST 800-53 Rev.5 and ISO 27001:2022 Annex A equivalents",
+    "version": "1.0.0",
+    "generated_for": "InvitISE Cloud Security POC — Financial Services",
+    "compliance_standards": ["CIS-1.4.0", "NIST-800-53-Rev5", "ISO-27001-2022"],
+    "last_updated": "2024-01-15"
+  },
+  "controls": {
+    "CIS-1.1": {
+      "title": "Maintain current contact details",
+      "nist": "PM-2",
+      "nist_title": "Senior Information Security Officer",
+      "iso": "A.6.1.1",
+      "iso_title": "Information security roles and responsibilities",
+      "pci_dss": "12.5",
+      "domain": "IAM",
+      "severity": "MEDIUM"
+    },
+    "CIS-1.4": {
+      "title": "Ensure no root account access key exists",
+      "nist": "AC-2",
+      "nist_title": "Account Management",
+      "iso": "A.9.2.3",
+      "iso_title": "Management of privileged access rights",
+      "pci_dss": "2.1",
+      "domain": "IAM",
+      "severity": "CRITICAL"
+    },
+    "CIS-1.5": {
+      "title": "Ensure MFA is enabled for the root account",
+      "nist": "IA-5",
+      "nist_title": "Authenticator Management",
+      "iso": "A.9.4.2",
+      "iso_title": "Secure log-on procedures",
+      "pci_dss": "8.3.1",
+      "domain": "IAM",
+      "severity": "CRITICAL"
+    },
+    "CIS-1.9": {
+      "title": "Ensure IAM password policy requires minimum length of 14 or greater",
+      "nist": "IA-5",
+      "nist_title": "Authenticator Management",
+      "iso": "A.9.4.3",
+      "iso_title": "Password management system",
+      "pci_dss": "8.3.6",
+      "domain": "IAM",
+      "severity": "MEDIUM"
+    },
+    "CIS-2.1": {
+      "title": "Ensure CloudTrail is enabled in all regions",
+      "nist": "AU-2",
+      "nist_title": "Event Logging",
+      "iso": "A.12.4.1",
+      "iso_title": "Event logging",
+      "pci_dss": "10.2",
+      "domain": "Logging",
+      "severity": "HIGH"
+    },
+    "CIS-2.2": {
+      "title": "Ensure CloudTrail log file validation is enabled",
+      "nist": "AU-9",
+      "nist_title": "Protection of Audit Information",
+      "iso": "A.12.4.2",
+      "iso_title": "Protection of log information",
+      "pci_dss": "10.5",
+      "domain": "Logging",
+      "severity": "HIGH"
+    },
+    "CIS-2.3": {
+      "title": "Ensure the S3 bucket used to store CloudTrail logs is not publicly accessible",
+      "nist": "AU-9",
+      "nist_title": "Protection of Audit Information",
+      "iso": "A.12.4.2",
+      "iso_title": "Protection of log information",
+      "pci_dss": "10.5.1",
+      "domain": "Logging",
+      "severity": "CRITICAL"
+    },
+    "CIS-2.9": {
+      "title": "Ensure VPC flow logging is enabled in all VPCs",
+      "nist": "SI-4",
+      "nist_title": "System Monitoring",
+      "iso": "A.12.4.1",
+      "iso_title": "Event logging",
+      "pci_dss": "10.3",
+      "domain": "Network",
+      "severity": "MEDIUM"
+    },
+    "CIS-3.1": {
+      "title": "Ensure a log metric filter and alarm exist for unauthorized API calls",
+      "nist": "SI-4",
+      "nist_title": "System Monitoring",
+      "iso": "A.12.4.1",
+      "iso_title": "Event logging",
+      "pci_dss": "10.6",
+      "domain": "Monitoring",
+      "severity": "HIGH"
+    },
+    "CIS-3.3": {
+      "title": "Ensure a log metric filter and alarm exist for root account usage",
+      "nist": "AC-6",
+      "nist_title": "Least Privilege",
+      "iso": "A.9.2.3",
+      "iso_title": "Management of privileged access rights",
+      "pci_dss": "8.2.2",
+      "domain": "Monitoring",
+      "severity": "CRITICAL"
+    },
+    "CIS-3.8": {
+      "title": "Ensure a log metric filter and alarm exist for S3 bucket policy changes",
+      "nist": "CM-6",
+      "nist_title": "Configuration Settings",
+      "iso": "A.12.1.2",
+      "iso_title": "Change management",
+      "pci_dss": "10.6.1",
+      "domain": "Monitoring",
+      "severity": "MEDIUM"
+    },
+    "CIS-4.1": {
+      "title": "Ensure no security groups allow unrestricted ingress to port 22",
+      "nist": "SC-7",
+      "nist_title": "Boundary Protection",
+      "iso": "A.13.1.1",
+      "iso_title": "Network controls",
+      "pci_dss": "1.3.1",
+      "domain": "Network",
+      "severity": "CRITICAL"
+    },
+    "CIS-4.2": {
+      "title": "Ensure no security groups allow unrestricted ingress to port 3389",
+      "nist": "SC-7",
+      "nist_title": "Boundary Protection",
+      "iso": "A.13.1.1",
+      "iso_title": "Network controls",
+      "pci_dss": "1.3.1",
+      "domain": "Network",
+      "severity": "CRITICAL"
+    },
+    "CIS-5.1": {
+      "title": "Ensure AWS Config is enabled",
+      "nist": "CM-6",
+      "nist_title": "Configuration Settings",
+      "iso": "A.12.1.1",
+      "iso_title": "Documented operating procedures",
+      "pci_dss": "2.2",
+      "domain": "Configuration",
+      "severity": "MEDIUM"
+    },
+    "CIS-5.2": {
+      "title": "Ensure S3 Bucket Policy is set to deny HTTP requests",
+      "nist": "SC-8",
+      "nist_title": "Transmission Confidentiality and Integrity",
+      "iso": "A.10.1.1",
+      "iso_title": "Policy on the use of cryptographic controls",
+      "pci_dss": "4.2.1",
+      "domain": "Encryption",
+      "severity": "HIGH"
+    },
+    "CIS-K8S-5.2.1": {
+      "title": "Minimize the admission of privileged containers",
+      "nist": "AC-6",
+      "nist_title": "Least Privilege",
+      "iso": "A.9.4.1",
+      "iso_title": "Information access restriction",
+      "pci_dss": "7.1",
+      "domain": "Kubernetes",
+      "severity": "CRITICAL"
+    },
+    "CIS-K8S-5.3.1": {
+      "title": "Ensure that all Namespaces have NetworkPolicies defined",
+      "nist": "SC-7",
+      "nist_title": "Boundary Protection",
+      "iso": "A.13.1.3",
+      "iso_title": "Segregation in networks",
+      "pci_dss": "1.3.2",
+      "domain": "Kubernetes",
+      "severity": "HIGH"
+    },
+    "CIS-K8S-5.6.4": {
+      "title": "Apply Security Context to Pods and Containers",
+      "nist": "SC-5",
+      "nist_title": "Denial of Service Protection",
+      "iso": "A.12.1.3",
+      "iso_title": "Capacity management",
+      "pci_dss": "6.3",
+      "domain": "Kubernetes",
+      "severity": "MEDIUM"
+    }
+  }
+}
